@@ -29,7 +29,13 @@ var klineformanalyser = require("../kline/form/analyser").config({
     });
 
 var valideCheckForms = klineformanalyser.kLineFormMethods(klineForm);
+// console.log("valideCheckForms", valideCheckForms)
 var listLen = process.argv[3] ? Number(process.argv[3]) : 20;
+
+//0.8313 'reversedHammerA,wBottom' ' of ' [ 'hammerA', 'reversedHammerA', 'wBottom
+//"wBottom, wBottomA, headShoulderBottom, on8While21UpVolumeHigh, on8While21Up, 
+//red3, redGreenRed, greenInRed, redNGreenRed";
+//morningStar, sidewaysCompression
 
 var stocksShowLog = []; //["SZ002158", "SH600061"];//["SH600987"];//["SZ002127"];
 var showLogDates = [] //["11/14/2011"];
@@ -40,6 +46,8 @@ if (cluster.isMaster) {
 
     var conditionanalyser = require("../kline/form/conditionanalyser");
     var stocksLen = stocks.length;
+    // var masterTotal = 0;
+    // var masterWins = 0;
     var masterResult = {
         master_total: 0,
         master_win: 0
@@ -51,137 +59,45 @@ if (cluster.isMaster) {
         lose: {}
     };
     var funName;
-
-
     var numCPUs = require('os').cpus().length;
     var forkStocks = Math.ceil(stocksLen / numCPUs);
-    // var forkStocksArr = [0, forkStocks - 80, 2 * forkStocks - 160, 3 * forkStocks - 200, 4 * forkStocks - 220,
-    //     5 * forkStocks - 270, 6 * forkStocks - 300, 7 * forkStocks - 160, stocksLen - 1
-    // ]
-    var onForkMessage = function(msg) {
-        funName = msg.fun;
-        var conditionObj = msg.conditionObj;
-        var forkValidObj = msg.forkValidObj;
-        masterSamples = masterSamples.concat(msg.forkSamples);
 
-        delete msg.forkValidObj;
-        delete msg.conditionObj;
-        delete msg.fun;
-
-        for (var att in msg) {
-            if (att === "fun" || att === "conditionObj" || att === "detailedDateResult") {
-                console.log("---------error")
-            } else masterResult["master_" + att] = masterResult["master_" + att] ? masterResult["master_" + att] + msg[att] : msg[att];
-        }
-
-        for (var att in forkValidObj) {
-            masterValidObj[att] = true;
-        }
-
-        for (var att in conditionObj.win) {
-            if (!masterConditionObj.win[att]) masterConditionObj.win[att] = {
-                "_true": 0,
-                "_false": 0,
-                true_unionvalid: 0,
-                false_unionvalid: 0
-            };
-            masterConditionObj.win[att]._true += conditionObj.win[att]._true;
-            masterConditionObj.win[att]._false += conditionObj.win[att]._false;
-
-            masterConditionObj.win[att].true_unionvalid += conditionObj.win[att].true_unionvalid;
-            masterConditionObj.win[att].false_unionvalid += conditionObj.win[att].false_unionvalid;
-        }
-        for (var att in conditionObj.lose) {
-            if (!masterConditionObj.lose[att]) masterConditionObj.lose[att] = {
-                "_true": 0,
-                "_false": 0,
-                true_unionvalid: 0,
-                false_unionvalid: 0
-            };
-            masterConditionObj.lose[att]._true += conditionObj.lose[att]._true;
-            masterConditionObj.lose[att]._false += conditionObj.lose[att]._false;
-
-
-            masterConditionObj.lose[att].true_unionvalid += conditionObj.lose[att].true_unionvalid;
-            masterConditionObj.lose[att].false_unionvalid += conditionObj.lose[att].false_unionvalid;
-        }
-
-    }
-    for (var i = 0; i < numCPUs; i++) {
-        if (i * forkStocks >= stocksLen) break;
+    var onBaseForkMessage = onBaseForkMessageHandler;
+    var workingForkCount = 0;
+    for (; workingForkCount < numCPUs; workingForkCount++) {
+        if (workingForkCount * forkStocks >= stocksLen) break;
         var worker = cluster.fork({
-            startIdx: i * forkStocks,
-            endIdx: Math.min((i + 1) * forkStocks, stocksLen) - 1
+            startIdx: workingForkCount * forkStocks,
+            endIdx: Math.min((workingForkCount + 1) * forkStocks, stocksLen) - 1
         });
-        //var worker = cluster.fork({startIdx: forkStocksArr[i], endIdx: forkStocksArr[i+1]});        
-        worker.on('message', onForkMessage);
+        worker.on('message', onBaseForkMessage);
     }
 
     cluster.on('exit', function(worker, code, signal) {
-        i--;
-        //console.log('worker ' + worker.process.pid + ' exits', code, masterWins, masterTotal);
-        if (i == 0) {
+        workingForkCount--;
+        if (workingForkCount == 0) {
 
             if (intersectionKLineForm) funName = klineForm + " && " + intersectionKLineForm;
             if (unionKLineForm) klineForm + " || " + unionKLineForm;
-
-            //console.log("sortedDates:", sortedDates)
-
             var winPer = masterResult.master_win / masterResult.master_total;
-
-            var mvo = 0;
-            for (var att in masterValidObj) {
-                mvo++;
-            }
-            console.log("master valid:", mvo)
-
             console.log(funName, "win:", masterResult.master_win + "/" + masterResult.master_total + "=" + (masterResult.master_win / masterResult.master_total).toFixed(3),
                 "   valid:", masterResult.master_valid + "/" + masterResult.master_total + "=" + (masterResult.master_valid / masterResult.master_total).toFixed(3));
-
-            
             console.log("\r\ncondition tune result:");
             var conditionArr = conditionFilter(masterConditionObj, winPer);
             conditionArr.sort(function(att1, att2){
                 return conditionSortFun(att1, att2, masterConditionObj, winPer)
             });
-            // console.log("conditionArr", winPer, conditionArr[0], conditionArr[1], conditionArr[2])
-            // var mscount = 0;
-            // var msmap = {};
-            // for (var msi=0; msi<masterSamples.length; msi++) {
-            //     var ms = masterSamples[msi];
-            //     if (msmap[ms.stockId] === undefined) {
-            //         msmap[ms.stockId] = true;
-            //         mscount++;
-            //     }
-            // }
-            // console.log("mscount-------------:", mscount);
 
             masterSamples.sort(function(s1, s2){
                 if (s1.stockId>s2.stockId) return -1;
                 else if (s1.stockId<s2.stockId) return 1;
                 else return 0
             })
-
-            // console.log("masterSamples:", masterSamples.length)
                                     
             var autoConditionArr = autoTuneCondition(masterSamples, conditionArr, masterConditionObj, valideCheckForms) 
             var conditionStr = autoConditionArr.join("\r\n&& ").replace(/<<<</g, "")
             console.log("autoConditionArr:", conditionStr)
-            // for (var ci = 0; ci < listLen && ci < conditionArr.length; ci++) {
-            //     catt = conditionArr[ci];
-            //     var wincon = masterConditionObj.win[catt];
-            //     var losecon = masterConditionObj.lose[catt];
-            //     var truewinper = wincon._true / (wincon._true + losecon._true);
-            //     var losewinper = wincon._false / (wincon._false + losecon._false);
-
-            //     var per = Math.max(truewinper, losewinper);
-
-            //     var count_unionvalid = truewinper > losewinper ? (wincon.true_unionvalid + losecon.true_unionvalid) : (wincon.false_unionvalid + losecon.false_unionvalid);
-            //     if (isNaN(per)) console.log(wincon, losecon)
-            //     console.log(per.toFixed(3),
-            //         truewinper > losewinper ? wincon._true + "/" + (wincon._true + losecon._true) : wincon._false + "/" + (wincon._false + losecon._false), 
-            //             truewinper > losewinper ? "T" : "F", count_unionvalid, catt)
-            // }
+            
 
             console.timeEnd("run");
         }
@@ -190,17 +106,7 @@ if (cluster.isMaster) {
 
 } else if (cluster.isWorker) {
 
-    // var klineformanalyser = require("../kline/form/analyser").config({
-    //     startDate: startDate,
-    //     endDate: endDate
-    // });
-    // var bullKLineFormMethods = klineformanalyser.bullKLineFormMethods();
-    // var mtdsidx = bullKLineFormMethods.indexOf(klineForm);
-    // bullKLineFormMethods.splice(mtdsidx, 1);
-    //    console.log("bullKLineFormMethods:",bullKLineFormMethods)
     var conditionanalyser = require("../kline/form/conditionanalyser");
-
-    // unionKLineForm = klineformanalyser.bullKLineFormMethods().join(",");
 
     var forkResult = {
         total: 0,
@@ -212,16 +118,9 @@ if (cluster.isMaster) {
         win: {},
         lose: {}
     };
-    //var forkTotal = 0;
-    //var forkWins = 0;
 
     var startIdx = parseInt(process.env.startIdx, 10);
     var endIdx = parseInt(process.env.endIdx, 10);
-
-    function dateToString(date) {
-        var mth = date.getMonth() + 1;
-        return (mth > 9 ? mth : "0" + mth) + "/" + date.getDate() + "/" + date.getFullYear();
-    }
 
     function processStock(idx) {
         var stockId = stocks[idx];
@@ -287,6 +186,7 @@ if (cluster.isMaster) {
     }
 
     processStock(startIdx);
+
 }
 
 function autoTuneCondition(samples, conditionArr, condObj, valideCheckForms) {
@@ -315,7 +215,6 @@ function autoTuneCondition(samples, conditionArr, condObj, valideCheckForms) {
             Math.max(truewinper, losewinper).toFixed(3), total_unionvalid+"/"+total_all);
 
         if (validper>0.8) return [(isTrue?cond:"!("+cond+")")+"//"+validper.toFixed(3)+" "+total_unionvalid+"/"+total_all];
-
 
         var subCondObj = {
             win: {},
@@ -428,6 +327,11 @@ function conditionFilter(conditionObj, per) {
     return conditionArr;
 }
 
+function dateToString(date) {
+    var mth = date.getMonth() + 1;
+    return (mth > 9 ? mth : "0" + mth) + "/" + date.getDate() + "/" + date.getFullYear();
+}
+
 function conditionSortFun(att1, att2, conditionObj, winPer) {
     var wincon1 = conditionObj.win[att1];
     var losecon1 = conditionObj.lose[att1];
@@ -465,4 +369,50 @@ function conditionSortFun(att1, att2, conditionObj, winPer) {
     return 0;
 }
 
+function onBaseForkMessageHandler(msg) {
+    console.log("onBaseForkMessage")
+    funName = msg.fun;
+    var conditionObj = msg.conditionObj;
+    var forkValidObj = msg.forkValidObj;
+    masterSamples = masterSamples.concat(msg.forkSamples);
 
+    delete msg.forkValidObj;
+    delete msg.conditionObj;
+    delete msg.fun;
+
+    for (var att in msg) {
+        masterResult["master_" + att] = masterResult["master_" + att] ? masterResult["master_" + att] + msg[att] : msg[att];
+    }
+
+    for (var att in forkValidObj) {
+        masterValidObj[att] = true;
+    }
+
+    for (var att in conditionObj.win) {
+        if (!masterConditionObj.win[att]) masterConditionObj.win[att] = {
+            "_true": 0,
+            "_false": 0,
+            true_unionvalid: 0,
+            false_unionvalid: 0
+        };
+        masterConditionObj.win[att]._true += conditionObj.win[att]._true;
+        masterConditionObj.win[att]._false += conditionObj.win[att]._false;
+
+        masterConditionObj.win[att].true_unionvalid += conditionObj.win[att].true_unionvalid;
+        masterConditionObj.win[att].false_unionvalid += conditionObj.win[att].false_unionvalid;
+    }
+    for (var att in conditionObj.lose) {
+        if (!masterConditionObj.lose[att]) masterConditionObj.lose[att] = {
+            "_true": 0,
+            "_false": 0,
+            true_unionvalid: 0,
+            false_unionvalid: 0
+        };
+        masterConditionObj.lose[att]._true += conditionObj.lose[att]._true;
+        masterConditionObj.lose[att]._false += conditionObj.lose[att]._false;
+
+        masterConditionObj.lose[att].true_unionvalid += conditionObj.lose[att].true_unionvalid;
+        masterConditionObj.lose[att].false_unionvalid += conditionObj.lose[att].false_unionvalid;
+    }
+
+}
