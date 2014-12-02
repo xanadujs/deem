@@ -3,19 +3,19 @@ var endDate = new Date("08/01/2015");
 
 var klineio = require("../kline/klineio").config(startDate, endDate);
 var conditionanalyser = require("../kline/form/conditionanalyser");
-
+var klineutil = require("../kline/klineutil");
 process.on('message', function(m) {
     // console.log('CHILD got message:', m.condition, m.samples.length);
     var subCondObj = {
         win: {},
         lose: {}
     };
-
    var subsamples = samplesOfCondition(m.samples, m.condition, m.isTrue, m.validObj, subCondObj);
    process.send({
         subSamples: subsamples,
         subCondObj: subCondObj
     });
+
    process.exit(0);
 });
 

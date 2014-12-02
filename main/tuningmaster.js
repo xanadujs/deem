@@ -6,6 +6,7 @@ var endDate = new Date("08/01/2015");
 
 var klineutil = require("../kline/klineutil");
 var klineio = require("../kline/klineio").config(startDate, endDate);
+var klineformbase = require("../klineformbase");
 var cluster = require('cluster');
 var childprocess = require('child_process');
 
@@ -20,14 +21,20 @@ var dateSections = [new Date("01/01/2008"), new Date("01/01/2009"), new Date("01
     new Date("01/01/2012"),
     new Date("01/01/2013"), new Date("01/01/2014"), new Date("08/01/2014")
 ];
-
-var klineForm = process.argv[2] ? process.argv[2] : "sh600716_201410";
+var MinUnionValid = 10000;
+var klineForm = process.argv[2] ? process.argv[2] : "wBottomA_b";
 var intersectionKLineForm = "" //moneyFlowInOut";
 var unionKLineForm = "" //wBottomA,wBottom,headShoulderBottom,morningStarA,morningStarB,redNGreenRed,greenInRedA";
 var klineformanalyser = require("../kline/form/analyser").config({
     startDate: startDate,
-    endDate: endDate
+    endDate: endDate,
+    form: "./form80.js"
 });
+
+var klineformbase = require("../klineformbase");
+var funcitonio = require("../funcitonio");
+
+klineformanalyser.klineforms[klineForm] = klineformbase[klineForm];
 
 var valideCheckForms = klineformanalyser.kLineFormMethods(klineForm);
 // console.log("valideCheckForms", valideCheckForms)
@@ -42,7 +49,7 @@ var stocksShowLog = []; //["SZ002158", "SH600061"];//["SH600987"];//["SZ002127"]
 var showLogDates = [] //["11/14/2011"];
 
 var stocks = klineio.getAllStockIds();
-// stocks = ['SH600802']//['SZ002371', "SZ002158", "SH600061"];
+// stocks = ['SZ300009', 'SZ300365']//['SZ002371', "SZ002158", "SH600061"];
 if (cluster.isMaster) {
 
     var conditionanalyser = require("../kline/form/conditionanalyser");
@@ -63,7 +70,6 @@ if (cluster.isMaster) {
     var numCPUs = require('os').cpus().length;
     var forkStocks = Math.ceil(stocksLen / numCPUs);
 
-    var onBaseForkMessage = onBaseForkMessageHandler;
     var workingForkCount = 0;
     for (; workingForkCount < numCPUs; workingForkCount++) {
         if (workingForkCount * forkStocks >= stocksLen) break;
@@ -71,41 +77,64 @@ if (cluster.isMaster) {
             startIdx: workingForkCount * forkStocks,
             endIdx: Math.min((workingForkCount + 1) * forkStocks, stocksLen) - 1
         });
-        worker.on('message', onBaseForkMessage);
-    }
 
-    cluster.on('exit', function(worker, code, signal) {
-        workingForkCount--;
-        if (workingForkCount == 0) {
+        worker.on('message', function(msg){
+            onBaseForkMessageHandler(msg);
+            workingForkCount--;
+            console.log("message------", workingForkCount)
+            if (workingForkCount == 0) {       
+                if (intersectionKLineForm) funName = klineForm + " && " + intersectionKLineForm;
+                if (unionKLineForm) klineForm + " || " + unionKLineForm;
+                var winPer = masterResult.master_win / masterResult.master_total;
+                console.log(funName, "win:", masterResult.master_win + "/" + masterResult.master_total + "=" + (masterResult.master_win / masterResult.master_total).toFixed(3),
+                    "   valid:", masterResult.master_valid + "/" + masterResult.master_total + "=" + (masterResult.master_valid / masterResult.master_total).toFixed(3));
+                console.log("\r\ncondition tune result:");
+                var conditionArr = conditionFilter(masterConditionObj, winPer);
+                conditionArr.sort(function(att1, att2) {
+                    return conditionSortFun(att1, att2, masterConditionObj, winPer)
+                });
 
-            if (intersectionKLineForm) funName = klineForm + " && " + intersectionKLineForm;
-            if (unionKLineForm) klineForm + " || " + unionKLineForm;
-            var winPer = masterResult.master_win / masterResult.master_total;
-            console.log(funName, "win:", masterResult.master_win + "/" + masterResult.master_total + "=" + (masterResult.master_win / masterResult.master_total).toFixed(3),
-                "   valid:", masterResult.master_valid + "/" + masterResult.master_total + "=" + (masterResult.master_valid / masterResult.master_total).toFixed(3));
-            console.log("\r\ncondition tune result:");
-            var conditionArr = conditionFilter(masterConditionObj, winPer);
-            conditionArr.sort(function(att1, att2) {
-                return conditionSortFun(att1, att2, masterConditionObj, winPer)
-            });
-
-            masterSamples.sort(function(s1, s2) {
-                if (s1.stockId > s2.stockId) return -1;
-                else if (s1.stockId < s2.stockId) return 1;
-                else return 0
+                masterSamples.sort(function(s1, s2) {
+                    if (s1.stockId > s2.stockId) return -1;
+                    else if (s1.stockId < s2.stockId) return 1;
+                    else return 0
             })
 
-            autoTuneConditions(masterSamples, masterConditionObj, conditionArr, 0, function(autoConditionArr){
-                var conditionStr = autoConditionArr.join("\r\n&& ").replace(/<<<</g, "")
-                console.log("autoConditionArr:\r\n", conditionStr);
-                console.timeEnd("run");
+            var maxUnionValid = 0;
+            autoTuneConditions(masterSamples, masterConditionObj, conditionArr, 0, function(conditions){
+                var conditionStr = "";
+                for (var conditionsIdx=0; conditionsIdx<conditions.length; conditionsIdx++ ) {
+                    var conditionObj = conditions[conditionsIdx];
+                    var cstr = conditionObj.condition;
+                    if (conditionsIdx != 0) conditionStr += "\r\n&& ";
+                    conditionStr += cstr.replace(/<<<</g, "");
+
+                    conditionStr += "//" + conditionObj.conditionIdx +" "+conditionObj.probability.toFixed(3)+" " + conditionObj.unionvalid+"/" + conditionObj.total;
+                }
+                
+                console.log("");
+
+                if(conditions[0].unionvalid > MinUnionValid) {
+                    MinUnionValid = conditions[0].unionvalid;
+                    console.log("***************MinUnionValid = ", MinUnionValid)
+                }
+
+                if (conditions[0].unionvalid > maxUnionValid) {
+                    maxUnionValid = conditions[0].unionvalid;
+                    console.log("autoConditionArr MAX:\r\n", conditionStr);
+                    funcitonio.writeFunctionSync(klineForm, conditionStr);
+                } else {
+                    // console.log("autoConditionArr:\r\n", conditionStr);
+                }
+
             })
             
-
-
         }
+        });
+        worker.on('exit', function() {
+            console.log("exit------", workingForkCount)   
     });
-
+    }
 
 } else if (cluster.isWorker) {
 
@@ -192,13 +221,23 @@ if (cluster.isMaster) {
 
 }
 
+function stopCheck(per, total, condArr, condIdx){
+        return condIdx === condArr.length-1
+        || (per<0.77 && condIdx>20)
+        // || (per<0.79 && total<18000)
+        || (per<0.75 && total<MinUnionValid*2)
+        || (per<0.7 && total<MinUnionValid*3)
+}
+
 function autoTuneConditions(samples, condObj, conditionArr, condidx, callback) {
+    // console.log("autoTuneConditions start", condidx)
+
     var cond = conditionArr[condidx];
     var wincon = condObj.win[cond];
     var losecon = condObj.lose[cond];
     
     if (wincon === undefined) {
-        console.log("wincom undefined", condidx, cond)
+        console.log("wincom undefined", condidx, cond, conditionArr.length)
         return;
     }
 
@@ -210,18 +249,43 @@ function autoTuneConditions(samples, condObj, conditionArr, condidx, callback) {
     var total_unionvalid = truewinper > losewinper ? (wincon.true_unionvalid + losecon.true_unionvalid) : (wincon.false_unionvalid + losecon.false_unionvalid);
 
     var total_all = truewinper > losewinper ? (wincon._true + losecon._true) : (wincon._false + losecon._false);
+    if (stopCheck(validper, total_unionvalid, conditionArr, condidx)) {
+        setImmediate(callback);
+        return;
+    }
 
-    if (total_unionvalid < 1000) {
-        autoTuneConditions(samples, condObj, conditionArr, condidx++, callback);
+    if (total_unionvalid < 0.8*MinUnionValid || total_unionvalid < MinUnionValid && validper<0.805) {
+        // autoTuneConditions(samples, condObj, conditionArr, condidx++, callback);
+        setImmediate(autoTuneConditions, samples, condObj, conditionArr, ++condidx, callback);
         return;
     };
 
-    console.log("autoTuneCondition:", cond, truewinper > losewinper ? "T" : "F",
+    if (total_unionvalid < MinUnionValid) 
+        console.log("*****************", total_unionvalid, MinUnionValid, validper)
+        
+    console.log("autoTuneCondition:",condidx, cond, truewinper > losewinper ? "T" : "F",
         Math.max(truewinper, losewinper).toFixed(3), total_unionvalid + "/" + total_all);
+    
+    var callbackParam = {
+        condition: (isTrue ? cond : "!(" + cond + ")"),
+        probability: validper,
+        total:total_all,
+        unionvalid:total_unionvalid,
+        conditionIdx: condidx
+    }
 
-    var callbackStr = (isTrue ? cond : "!(" + cond + ")") + "//" + validper.toFixed(3) + " " + total_unionvalid + "/" + total_all;
+     // (isTrue ? cond : "!(" + cond + ")") + "//" + validper.toFixed(3) + " " + total_unionvalid + "/" + total_all;
+
     if (validper > 0.8) {
-        callback([callbackStr])
+        var maxUnionValidConditionIdx = getMaxUnionValidConditionIdx(condObj, conditionArr, condidx);
+        console.log("maxUnionValidConditionIdx", condidx, cond, maxUnionValidConditionIdx, conditionArr[maxUnionValidConditionIdx])
+        if (condidx != maxUnionValidConditionIdx) {
+            setImmediate(autoTuneConditions, samples, condObj, conditionArr, maxUnionValidConditionIdx, callback);
+        } else {
+            callback([callbackParam])
+            setImmediate(callback);
+
+        }
         return;
     }
 
@@ -255,10 +319,18 @@ function autoTuneConditions(samples, condObj, conditionArr, condidx, callback) {
                 subconditionArr.sort(function(att1, att2) {
                     return conditionSortFun(att1, att2, subCondObj, validper)
                 });
-                autoTuneConditions(subSamplesObj.subSamples, subCondObj, subconditionArr, 0, function(arr){
-                    arr.push(callbackStr)
-                    callback(arr);
-                })
+                var subconditionArrIdx = 0;
+                autoTuneConditions(subSamplesObj.subSamples, subCondObj, subconditionArr, subconditionArrIdx, function(arr){
+                    if (arr) {
+                        arr.push(callbackParam)
+                        callback(arr);
+                    } else {
+                        console.log(">>>>>>>>>>> ", cond)
+                        setImmediate(autoTuneConditions, samples, condObj, conditionArr, ++condidx, callback);
+                    }
+                });
+
+
             }
         })
 
@@ -306,9 +378,11 @@ function conditionFilter(conditionObj, per) {
         var losecon = conditionObj.lose[att];
         var truewinper = wincon._true / (wincon._true + losecon._true);
         var falsewinper = wincon._false / (wincon._false + losecon._false);
-        if (truewinper >= falsewinper && truewinper - per > 0.01 && wincon.true_unionvalid + losecon.true_unionvalid > 800) {
+        if (truewinper >= falsewinper && (truewinper>0.8 || truewinper - per > 0.01)
+            && wincon.true_unionvalid + losecon.true_unionvalid > 800) {
             conditionArr.push(att);
-        } else if (truewinper < falsewinper && falsewinper - per > 0.01 && wincon.false_unionvalid + losecon.false_unionvalid > 800) {
+        } else if (truewinper < falsewinper && (falsewinper>0.8 || falsewinper - per > 0.01)
+            && wincon.false_unionvalid + losecon.false_unionvalid > 800) {
             conditionArr.push(att);
         }
     }
@@ -318,6 +392,31 @@ function conditionFilter(conditionObj, per) {
 function dateToString(date) {
     var mth = date.getMonth() + 1;
     return (mth > 9 ? mth : "0" + mth) + "/" + date.getDate() + "/" + date.getFullYear();
+}
+
+function getMaxUnionValidConditionIdx(conditionObj, conditionArr, currentIdx) {
+    var maxUnionValid = 0;
+    var maxUnionValidConditionIdx = 0;
+    var i = currentIdx+1;
+    for (; i<conditionArr.length; i++) {
+        var att = conditionArr[i];
+        var wincon = conditionObj.win[att];
+        var losecon = conditionObj.lose[att];
+
+        var truewinper = wincon._true / (wincon._true + losecon._true);
+        var falsewinper = wincon._false / (wincon._false + losecon._false);
+        var unionvalid = truewinper > falsewinper ? (wincon.true_unionvalid + losecon.true_unionvalid)
+         : (wincon.false_unionvalid + losecon.false_unionvalid);
+        var per = Math.max(truewinper, falsewinper);
+        if (per>0.8 && unionvalid>maxUnionValid) {
+            maxUnionValid = unionvalid;
+            maxUnionValidConditionIdx = i;
+            // console.log(i, per, maxUnionValid, conditionArr[i])
+        }
+
+    }
+
+    return maxUnionValidConditionIdx;
 }
 
 function conditionSortFun(att1, att2, conditionObj, winPer) {
@@ -348,7 +447,6 @@ function conditionSortFun(att1, att2, conditionObj, winPer) {
     } else {
         console.log(att2, wincon2, losecon2)
     }
-
 
     if (per1 > per2) return -1;
     if (per1 < per2) return 1;
@@ -399,5 +497,4 @@ function onBaseForkMessageHandler(msg) {
         masterConditionObj.lose[att].true_unionvalid += conditionObj.lose[att].true_unionvalid;
         masterConditionObj.lose[att].false_unionvalid += conditionObj.lose[att].false_unionvalid;
     }
-
 }
