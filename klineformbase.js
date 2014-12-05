@@ -1,5 +1,20 @@
 var klineutil = require("./kline/klineutil");
 
+function wBottomA_e(klineJson, i) {
+    var obj = klineJson[i];
+    if (obj.netsummax_r0 === undefined) return false;
+
+    /**/return function(m, n) {
+            var rightBottom = klineutil.lowIndexOfUpTrend(klineJson, i);
+            var middleTop = klineutil.highIndexOfDownTrend(klineJson, rightBottom);
+            var leftBottom = klineutil.lowIndexOfUpTrend(klineJson, middleTop);
+
+            var outerHigh = klineutil.highItem(klineJson, leftBottom - m, leftBottom, "high");
+            return klineutil.increase(klineJson[leftBottom].high, outerHigh) > n* klineJson[leftBottom].amplitude_ave_21
+        }(25,6)
+}
+exports.wBottomA_e = wBottomA_e;
+
 function wBottomA_d(klineJson, i) {
     var obj = klineJson[i];
     if (obj.netsummax_r0 === undefined) return false;

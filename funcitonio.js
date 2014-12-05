@@ -14,7 +14,7 @@ function writeFunctionSync(baseFunctionName, conditions) {
   fstr += "\r\n";
   fstr += "exports." + fname + " = " + fname + "//"+new Date()+"\r\n";
   // fs.appendFileSync("../../node/stock/kline/form/form80.js", fstr);
-  fs.appendFileSync("maxUnionValid.log.js", fstr);
+  fs.appendFileSync("../logs/"+baseFunctionName+".log.js", fstr);
 }
 
 exports.writeFunctionSync = writeFunctionSync;
