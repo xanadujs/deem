@@ -2,7 +2,9 @@ var startDate = new Date("01/01/2010");
 var endDate = new Date("08/01/2015");
 
 var klineio = require("../kline/klineio").config(startDate, endDate);
+klineio.getAllStockIds();
 var conditionanalyser = require("../kline/form/conditionanalyser");
+conditionanalyser.scanConditions([{}],0,{});
 var klineutil = require("../kline/klineutil");
 process.on('message', function(m) {
     // console.log('CHILD got message:', m.condition, m.samples.length);
@@ -10,18 +12,16 @@ process.on('message', function(m) {
         win: {},
         lose: {}
     };
-   var subsamples = samplesOfCondition(m.samples, m.condition, m.isTrue, m.validObj, subCondObj);
+   var subsamples = samplesOfCondition(m.samples, m.condition, m.isTrue, m.validObj, subCondObj, m.conditionScanObj);
    process.send({
         subSamples: subsamples,
         subCondObj: subCondObj
     });
 
-   process.exit(0);
+   // process.exit(0);
 });
 
-
-
-function samplesOfCondition(samples, cond, isTrue, validObj, subCondObj) {
+function samplesOfCondition(samples, cond, isTrue, validObj, subCondObj, conditionScanObj) {
     
     var subsamples = [];
     var wincount = 0;

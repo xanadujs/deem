@@ -25,7 +25,8 @@ var intersectionKLineForm = "" //moneyFlowInOut";
 var unionKLineForm = "" //wBottomA,wBottom,headShoulderBottom,morningStarA,morningStarB,redNGreenRed,greenInRedA";
 var klineformanalyser = require("../kline/form/analyser").config({
         startDate: startDate,
-        endDate: endDate
+        endDate: endDate,
+        form: "./form80.js"
     });
 
 var valideCheckForms = klineformanalyser.kLineFormMethods(klineForm);
