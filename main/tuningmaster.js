@@ -128,10 +128,10 @@ if (cluster.isMaster) {
                         console.log("");
 
                         if (conditions[0].unionvalid > MinUnionValid) {
-                            if (conditions[0].probability>0.8) {
-                                MinUnionValid = conditions[0].unionvalid;
-                                console.log("***************MinUnionValid = ", MinUnionValid)
-                            }
+                            // if (conditions[0].probability>0.8) {
+                            MinUnionValid = conditions[0].unionvalid;
+                            console.log("***************MinUnionValid = ", MinUnionValid)
+                            // }
                             console.log("autoConditionArr MAX:\r\n", conditionStr);
                             funcitonio.writeFunctionSync(klineForm, conditionStr);
                         } else {
@@ -239,6 +239,7 @@ if (cluster.isMaster) {
 
 function stopCheck(per, total, condArr, condIdx) {
     return condIdx === condArr.length
+        || (per < 0.76 && condIdx > 3) 
         || (per < 0.77 && condIdx > 5) 
         || (per < 0.78 && condIdx > 10) 
         || (per < 0.79 && condIdx > 60) 

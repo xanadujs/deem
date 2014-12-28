@@ -224,3 +224,32 @@ function sidewaysCompression_1_0(klineJson, i) {
     }(30,40,0.6)
 }
 exports.sidewaysCompression_1_0 = sidewaysCompression_1_0//Sat Dec 27 2014 23:12:34 GMT+0800 (中国标准时间)
+
+function sidewaysCompression_1_0(klineJson, i) {
+    var obj = klineJson[i];
+    if (obj.netsummax_r0 === undefined) return false;
+
+    return !(obj.netsum_r0x_80>0.1*obj.amount_ave_21)//143 0.798 7272/23028
+&& obj.amount_ave_21<1.05*obj.amount_ave_8//2 0.796 7607/24033
+&& !(obj.netsum_r0_10<-0.02*obj.amount_ave_21)//2 0.772 13674/34840
+&& obj.netsummin_r0x_5-obj.netsummin_r0x_10<0.3*obj.amount_ave_21//0 0.748 22434/47721
+&& obj.turnover_ave_8>0.8*obj.turnover_ave_21//3 0.713 51938/95566
+&& obj.netsummax_r0_10===-0.0*obj.amount_ave_21//1 0.680 89609/135555
+&& obj.marketCap < 3000000000//1 0.644 202443/260716
+ && !function(m, n, k) {
+        var hidx = klineutil.highItemIndex(klineJson, i-m, i-1, "close");
+        var hval = klineJson[hidx].close;
+        
+        var lidx = klineutil.lowItemIndex(klineJson, hidx, i, "close");
+        var lval = klineJson[lidx].close;
+
+        var plidx = klineutil.lowItemIndex(klineJson, hidx-n, hidx, "close");
+        var plval = klineJson[plidx].close;
+
+        var downhpl = klineutil.increase(plval, hval);    
+        var downhl = klineutil.increase(lval, hval);
+    
+        return downhpl>k*downhl;;
+    }(30,40,0.6)
+}
+exports.sidewaysCompression_1_0 = sidewaysCompression_1_0//Sun Dec 28 2014 13:04:11 GMT+0800 (中国标准时间)
