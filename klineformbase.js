@@ -1,5 +1,185 @@
 var klineutil = require("./kline/klineutil");
 
+function sz002424_201401_1(klineJson, i) {
+    var obj = klineJson[i];
+    if (obj.netsummax_r0 === undefined) return false;
+
+    /**/return function(a, b, c, d, e, f, g) {
+            //return true;
+            var n = i;
+            for (; i-n<a; n--) {
+                if (klineutil.increase(klineJson[i].amount_ave_8, klineJson[n].amount_ave_8)>b)
+                    break;
+            }
+
+            if (i-n>=a) return false;
+
+            var lidx = klineutil.lowItemIndex(klineJson, n-c, i, "close");
+            var hidx = klineutil.highItemIndex(klineJson, n-d, n, "close");
+            var re = true
+                && n-lidx<e
+                && klineutil.increase(klineJson[i].close, klineJson[n].close)>f*0.03//klineJson[i].amplitude_ave_8
+                && klineutil.increase(klineJson[n].close, klineJson[hidx].close)>g*0.03//klineJson[n].amplitude_ave_8
+               
+            return re;
+        }(60, 0.5, 30, 60, 10, 2.5, 0)
+ }
+exports.sz002424_201401_1 = sz002424_201401_1;
+
+function bullPulsing_1(klineJson, i) {
+    var obj = klineJson[i];
+    if (obj.netsummax_r0 === undefined) return false;
+
+    /**/return function(a, b, c, d, e, f) {
+            // return true
+            var n=i;
+            var biginc = 0;
+            for (; n>1; n--) {
+                var inc_ave = klineJson[n].inc_ave_21;
+                if (klineutil.increase(klineJson[n].open, klineJson[n].close) > 0.01*a//inc_ave*a
+                    ) {
+                    biginc = klineutil.increase(klineJson[n].open, klineJson[n].close);
+                    break;
+                } 
+            }
+            for (var j=n+1; j<=i; j++) {
+                var inc_ave = klineJson[n-1].inc_ave_8;
+                if (klineutil.increase(klineJson[n].close, klineJson[j].close) < b*inc_ave
+                    )
+                    return false;
+            }
+
+            var lowerItems = klineutil.lowerItemsIndex(klineJson, n-c, n, "close", klineJson[n].open);
+            var higherItems = klineutil.higherItemsIndex(klineJson, n-d, n, "low", klineJson[n].close);
+            return n-lowerItems[0] <e //&& n-higherItems[higherItems.length-1] > f;
+        }(2, -0.8, 65, 20, 50, 5) //(1.5, -1.5, 65, 20, 50, 5)
+        
+}
+exports.bullPulsing_1 = bullPulsing_1;
+
+function smallRedsAndGreensA_1(klineJson, i) {
+    var obj = klineJson[i];
+    if (obj.netsummax_r0 === undefined) return false;
+
+    /**/return function(a, b, c, d, e, f, g, h) {
+       //     return true
+        var n=i;
+        for (; n>1; n--) {
+            var inc_ave = klineJson[n].inc_ave_21;
+            if (Math.abs(klineutil.increase(klineJson[n].open, klineJson[n].close)) > inc_ave*a) {
+                break;
+            } 
+        }
+
+        return true
+            && i-n>= b
+            //&& klineutil.increase(klineJson[i-c].close_ave_8, klineJson[i].close_ave_8) > d//-klineJson[i].inc_ave_8*0.8
+            && function () {    
+            var lowerItems = klineutil.lowerItemsIndex(klineJson, i-e, i, "high", klineJson[i].low);
+            var lidx = klineutil.lowItem(klineJson, i-f, i, "low");
+            return true
+                && i-lowerItems[0] <g 
+                && klineutil.increase(lidx, klineJson[i].close) > klineJson[i].inc_ave_8*h
+        }()
+    }(3, 5, 4, 0, 80, 100, 40, 4)
+}
+exports.smallRedsAndGreensA_1 = smallRedsAndGreensA_1;
+
+function lowRedsB_1(klineJson, i) {
+    var obj = klineJson[i];
+    if (obj.netsummax_r0 === undefined) return false;
+    
+    /**/return function (a, b, c) {    
+            var higherItems = klineutil.higherItemsIndex(klineJson, i-a, i, "low", klineJson[i].high);
+            return i-higherItems[higherItems.length-1] > b && higherItems.length>c;
+        }(55, 10, 20)
+}
+exports.lowRedsB_1 = lowRedsB_1;
+
+function flatBottom_1(klineJson, i) {
+    var obj = klineJson[i];
+    if (obj.netsummax_r0 === undefined) return false;
+
+    /**/return function (a, b, c, d, e) {
+        var td = i-a;
+        var inc_ave = klineJson[i].inc_ave_8;
+        var hidx = klineutil.highItemIndex(klineJson, td-b, td, "close");
+        var higherItems = klineutil.higherItemsIndex(klineJson, td-c, i, "close", klineJson[i].close);
+        
+        return klineutil.increase(klineJson[i].close, klineJson[hidx].close) > inc_ave*d
+            && higherItems.length<e;
+    
+    }(1,40,13,6,7)
+
+}
+exports.flatBottom_1 = flatBottom_1;
+
+function hammer_1(klineJson, i) {
+     var obj = klineJson[i];
+    if (obj.netsummax_r0 === undefined) return false;
+
+    /**/return function(a, b, c, d) {
+
+            var linehigh = klineJson[i].high - Math.max(klineJson[i].close, klineJson[i].open);
+            var linelow = Math.min(klineJson[i].close, klineJson[i].open) - klineJson[i].low;
+            var entity = Math.abs(klineJson[i].close - klineJson[i].open);
+            var inc_ave = klineJson[i].inc_ave_8;
+            var hidx = klineutil.highItemIndex(klineJson, i-a, i, "close");
+            var higherItems = klineutil.higherItemsIndex(klineJson, i-b, i, "close", klineJson[i].low);
+            
+            return higherItems.length<c
+                        && klineutil.increase(klineJson[i].open, klineJson[hidx].close) > d * klineJson[i].amplitude_ave_8
+            
+        }(55, 12, 11, 4)
+}
+exports.hammer_1 = hammer_1;
+
+function reversedHammer_1(klineJson, i) {
+     var obj = klineJson[i];
+    if (obj.netsummax_r0 === undefined) return false;
+
+    /**/return function(a, b, c, d, e) {
+                var hidx = klineutil.highItemIndex(klineJson, i-a, i, "close");
+                var higherItems = klineutil.higherItemsIndex(klineJson, i-b, i, "close", klineJson[i].low);
+                return true
+                    && higherItems.length>c 
+                    && higherItems.length<d
+                    && klineutil.increase(klineJson[i].high, klineJson[hidx].close) > e
+            }(55, 20, 0, 15, 5*klineJson[i].amplitude_ave_8)
+
+}
+exports.reversedHammer_1 = reversedHammer_1;
+
+function greenInRed_1 (klineJson, i) {
+    var obj = klineJson[i];
+    if (obj.netsummax_r0 === undefined) return false;
+
+    /**/return function(a, b, c, d, e){
+            var lowerItems = klineutil.lowerItemsIndex(klineJson, i-a, i, "close", klineJson[i].low);
+            return  klineutil.increase(klineJson[i].open, klineJson[i].close) > d//0.5*obj.amplitude_ave_8 //d
+                && klineutil.increase(klineJson[i-1].open, klineJson[i-1].close) < e
+                && lowerItems.length > b && lowerItems.length < c;
+        }(120, 0, 45, 0.02, 0)
+
+}
+exports.greenInRed_1 = greenInRed_1;
+
+function redNGreenRed_1 (klineJson, i) {
+    var obj = klineJson[i];
+    if (obj.netsummax_r0 === undefined) return false;
+
+    /**/return function(a, b, c, d, e){
+            var top = klineutil.highIndexOfDownTrend(klineJson, i-1);            
+            
+            if (klineutil.increase(klineJson[top].high, obj.close) > -obj.amplitude_ave_8 * a //-inc_ave*3.5 
+                && klineutil.increase(klineJson[top].high, obj.close) <  obj.amplitude_ave_8*b) {
+                var lowerItems = klineutil.lowerItemsIndex(klineJson, top-c, top-1, "low", klineJson[top-1].high);
+                return lowerItems.length >d && lowerItems.length <e;
+            }
+             return false;
+        } (2, 1, 120, 6, 27) 
+}
+exports.redNGreenRed_1 = redNGreenRed_1;
 
 function sidewaysCompression_1 (klineJson, i) {
     var obj = klineJson[i];
@@ -74,6 +254,7 @@ function sh600716_201410_1 (klineJson, i) {
  }
 exports.sh600716_201410_1 = sh600716_201410_1;
 
+/********************************************************************/
 function headShoulderBottom_2(klineJson, i) {
     var obj = klineJson[i];
     if (obj.netsummax_r0 === undefined) return false;

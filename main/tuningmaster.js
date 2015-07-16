@@ -25,8 +25,8 @@ var dateSections = [new Date("01/01/2008"), new Date("01/01/2009"), new Date("01
 ];
 
 var winRate = 0.798;
-var MinUnionValid = 5000;
-var klineForm = process.argv[2] ? process.argv[2] : "headShoulderBottom_a";
+var MinUnionValid = 1000;
+var klineForm = process.argv[2] ? process.argv[2] : "wBottom_h";
 var intersectionKLineForm = "" //moneyFlowInOut";
 var unionKLineForm = "" //wBottomA,wBottom,headShoulderBottom,morningStarA,morningStarB,redNGreenRed,greenInRedA";
 var klineformanalyser = require("../kline/form/analyser").config({
@@ -239,6 +239,7 @@ if (cluster.isMaster) {
 
 function stopCheck(per, total, condArr, condIdx) {
     return condIdx === condArr.length
+        || (per < 0.65 && condIdx > 5) 
         || (per < 0.76 && condIdx > 3) 
         || (per < 0.77 && condIdx > 5) 
         || (per < 0.78 && condIdx > 10) 
@@ -248,7 +249,7 @@ function stopCheck(per, total, condArr, condIdx) {
         || (per > 0.78 && per <= 0.798 && total < (1.2- 10*(per-0.78))*MinUnionValid)
         // || (per < 0.77 && total < MinUnionValid * 1.5)
         || (per > 0.77 && per <= 0.78 && total < (1.5- 30*(per-0.77))*MinUnionValid)
-
+        || per < 0.77 && total < (1.5- 30*(per-0.77)) * MinUnionValid
         || total < 0.9*MinUnionValid 
         || total < MinUnionValid && per < winRate*1.005
         // || (per<0.7 && total<MinUnionValid*3)
@@ -464,8 +465,8 @@ function conditionSortFun(att1, att2, conditionObj, winPer) {
         var truewinper1 = wincon1._true / (wincon1._true + losecon1._true);
         var falsewinper1 = wincon1._false / (wincon1._false + losecon1._false);
         var unionvalid1 = truewinper1 > falsewinper1 ? (wincon1.true_unionvalid + losecon1.true_unionvalid) : (wincon1.false_unionvalid + losecon1.false_unionvalid);
-        var perdiff = 0.99*Math.max(truewinper1, falsewinper1) - winPer;
-        per1 = unionvalid1 * perdiff;
+        var perdiff = 0.999*Math.max(truewinper1, falsewinper1) - winPer;
+        per1 = unionvalid1 * perdiff;//22.79624
     } else {
         console.log(att1, wincon1, losecon1)
     }
@@ -477,7 +478,7 @@ function conditionSortFun(att1, att2, conditionObj, winPer) {
         var truewinper2 = wincon2._true / (wincon2._true + losecon2._true);
         var falsewinper2 = wincon2._false / (wincon2._false + losecon2._false);
         var unionvalid2 = truewinper2 > falsewinper2 ? (wincon2.true_unionvalid + losecon2.true_unionvalid) : (wincon2.false_unionvalid + losecon2.false_unionvalid);
-        var perdiff = 0.99*Math.max(truewinper2, falsewinper2) - winPer;
+        var perdiff = 0.999*Math.max(truewinper2, falsewinper2) - winPer;
 
         per2 = unionvalid2 * perdiff;
     } else {
